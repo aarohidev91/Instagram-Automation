@@ -109,7 +109,6 @@ All settings are read from environment variables (`.env` file). Copy `.env.examp
 | `GUI_PORT` | Dashboard port | `3000` |
 | `RENDER_EXTERNAL_URL` | App URL for keep-alive ping | *(empty)* |
 | `KEEP_ALIVE_INTERVAL` | Ping interval in minutes | `10` |
-| `PUPPETEER_EXECUTABLE_PATH` | Custom Chrome/Chromium path | *auto* |
 
 ### Post Types
 
@@ -175,7 +174,7 @@ src/
   index.js          – main entry point, wires everything together
   bot.js            – orchestrates scraping + posting + safety
   instagram.js      – Instagram API client with session management
-  scraper.js        – Pinterest scraper with stealth & retries
+  scraper.js        – multi-source meme scraper (Meme API, Reddit, Pinterest)
   config.js         – centralised configuration with typed getters
   utils.js          – logging, retry, file helpers
   rate-limiter.js   – sliding-window rate limiter (persisted)
@@ -215,12 +214,6 @@ The bot follows these practices to keep your account safe:
 ```bash
 rm -rf data/ig-session.json
 instagram-meme-bot config
-```
-
-### Puppeteer / Chrome Issues
-```bash
-# Ubuntu/Debian
-sudo apt-get update && sudo apt-get install -y gconf-service libasound2 libatk1.0-0 libcairo2 libcups2 libdbus-1-3 libexpat1 libfontconfig1 libgcc1 libgconf-2-4 libgdk-pixbuf2.0-0 libglib2.0-0 libgtk-3-0 libnspr4 libpango-1.0-0 libstdc++6 libx11-6 libxcomposite1 libxcursor1 libxdamage1 libxext6 libxfixes3 libxi6 libxrandr2 libxrender1 libxss1 libxtst6 ca-certificates fonts-liberation libnss3 xdg-utils wget
 ```
 
 ### Memory Issues

@@ -28,7 +28,6 @@
     "scraping",
     "cli",
     "nodejs",
-    "puppeteer",
     "dashboard",
     "gui",
     "scheduler",
@@ -55,8 +54,6 @@
     "express": "^4.21.0",
     "instagram-private-api": "^1.46.1",
     "node-cron": "^3.0.3",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "sharp": "^0.33.5"
   },
   "devDependencies": {

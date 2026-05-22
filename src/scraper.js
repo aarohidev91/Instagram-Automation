@@ -1,52 +1,48 @@
-const puppeteer = require('puppeteer-extra');
-const StealthPlugin = require('puppeteer-extra-plugin-stealth');
+const axios = require('axios');
 const utilities = require('./utils');
-
-puppeteer.use(StealthPlugin());
 
 /**
  * Keyword pools organised by post type.
- * Each type maps to an array of URL-encoded search terms.
+ * Each type maps to an array of search terms.
  */
 const KEYWORD_POOLS = {
   funny: [
-    'funny%20memes',
-    'hilarious%20memes',
-    'best%20memes%202024',
-    'funny%20relatable%20memes',
-    'clean%20funny%20memes',
+    'funny memes',
+    'hilarious memes',
+    'best memes 2024',
+    'funny relatable memes',
+    'clean funny memes',
   ],
   hinglish: [
-    'desi%20memes',
-    'indian%20memes',
-    'hinglish%20memes',
-    'hindi%20memes',
-    'aaj%20ka%20trending%20meme',
-    'bollywood%20memes',
+    'desi memes',
+    'indian memes',
+    'hinglish memes',
+    'hindi memes',
+    'bollywood memes',
   ],
   trending: [
-    'trending%20memes%20today',
-    'viral%20memes',
-    'latest%20memes',
-    'trending%20funny%20memes',
+    'trending memes today',
+    'viral memes',
+    'latest memes',
+    'trending funny memes',
   ],
   desi: [
-    'desi%20jokes',
-    'indian%20funny%20memes',
-    'desi%20relatable',
-    'indian%20college%20memes',
+    'desi jokes',
+    'indian funny memes',
+    'desi relatable',
+    'indian college memes',
   ],
   relatable: [
-    'relatable%20memes',
-    'daily%20life%20memes',
-    'work%20memes',
-    'student%20memes',
+    'relatable memes',
+    'daily life memes',
+    'work memes',
+    'student memes',
   ],
   programming: [
-    'programming%20memes',
-    'developer%20memes',
-    'coding%20humor',
-    'tech%20memes',
+    'programming memes',
+    'developer memes',
+    'coding humor',
+    'tech memes',
   ],
 };
 
@@ -54,109 +50,165 @@ const KEYWORD_POOLS = {
 const HINGLISH_KEYWORDS = KEYWORD_POOLS.hinglish;
 
 /**
- * Scrape copyright-safe memes from Pinterest with retries and
- * resource-safe browser management.
+ * Meme subreddit pools mapped by post type for the Reddit/Meme API source.
  */
-async function getSafeMeme(keyword = 'funny%20memes') {
-  let browser = null;
+const SUBREDDIT_POOLS = {
+  funny: ['memes', 'dankmemes', 'me_irl', 'funny'],
+  hinglish: ['IndianDankMemes', 'desimemes', 'indiameme', 'bollywoodmemes'],
+  trending: ['memes', 'dankmemes', 'MemeEconomy', 'AdviceAnimals'],
+  desi: ['IndianDankMemes', 'desimemes', 'indiameme'],
+  relatable: ['me_irl', 'meirl', '2meirl4meirl', 'relatable_memes'],
+  programming: ['ProgrammerHumor', 'programmingmemes', 'codingmemes'],
+};
 
-  try {
-    browser = await puppeteer.launch({
-      headless: 'new',
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--single-process',
-        '--disable-gpu',
-      ],
-      executablePath:
-        process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    });
+const USER_AGENT =
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
 
-    return await utilities.retry(
-      () => _scrapePage(browser, keyword),
-      3,
-      10000
-    );
-  } finally {
-    if (browser) {
-      try {
-        await browser.close();
-      } catch {
-        /* already closed */
-      }
+/**
+ * Get a meme image URL.  Tries multiple sources in order:
+ * 1. Meme API (meme-api.com) – lightweight, no browser needed
+ * 2. Reddit JSON API – direct subreddit scrape
+ * 3. Pinterest HTML scrape (axios) – fallback
+ */
+async function getSafeMeme(keyword = 'funny memes', postType) {
+  const type = postType || _typeFromKeyword(keyword);
+
+  const sources = [
+    () => _fromMemeApi(type),
+    () => _fromRedditJson(type),
+    () => _fromPinterestHtml(keyword),
+  ];
+
+  for (const source of sources) {
+    try {
+      const url = await utilities.retry(source, 2, 5000);
+      if (url) return url;
+    } catch (err) {
+      utilities.logToFile(`Scraper: source failed – ${err.message}`, 'warn');
     }
   }
+
+  throw new Error('All meme sources exhausted');
 }
 
-async function _scrapePage(browser, keyword) {
-  let page = null;
-  try {
-    page = await browser.newPage();
+/* ------------------------------------------------------------------ */
+/*  Source 1: Meme API (meme-api.com)                                  */
+/* ------------------------------------------------------------------ */
 
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
-    );
-    await page.setViewport({ width: 1280, height: 800 });
+async function _fromMemeApi(type) {
+  const subs = SUBREDDIT_POOLS[type] || SUBREDDIT_POOLS.funny;
+  const sub = subs[Math.floor(Math.random() * subs.length)];
 
-    await page.evaluateOnNewDocument(() => {
-      Object.defineProperty(navigator, 'webdriver', {
-        get: () => false,
-      });
-    });
+  utilities.logToFile(`Scraper: trying meme-api.com (r/${sub})`);
 
-    utilities.logToFile(`Scraper: loading Pinterest for "${decodeURIComponent(keyword)}"`);
-    await page.goto(
-      `https://www.pinterest.com/search/pins/?q=${keyword}&rs=typed`,
-      { waitUntil: 'networkidle2', timeout: 120000 }
-    );
+  const { data } = await axios.get(
+    `https://meme-api.com/gimme/${sub}`,
+    { timeout: 15000, headers: { 'User-Agent': USER_AGENT } }
+  );
 
-    await utilities.randomDelay(2000, 5000);
-
-    // scroll to load images
-    for (let i = 0; i < 5; i++) {
-      await page.evaluate(() => window.scrollBy(0, 1500));
-      await utilities.delay(1500 + Math.random() * 1500);
-    }
-
-    const memeUrls = await page.evaluate(() => {
-      return Array.from(document.querySelectorAll('img'))
-        .map((img) => {
-          let src = img.src;
-          if (src.includes('/236x/'))
-            src = src.replace('/236x/', '/originals/');
-          else if (src.includes('/474x/'))
-            src = src.replace('/474x/', '/originals/');
-          else if (src.includes('/736x/'))
-            src = src.replace('/736x/', '/originals/');
-          return src;
-        })
-        .filter(
-          (src) =>
-            src.startsWith('https://i.pinimg.com/originals/') &&
-            /\.(jpg|jpeg|png)$/i.test(src)
-        );
-    });
-
-    if (!memeUrls.length) throw new Error('No copyright-safe memes found');
-
-    const selected =
-      memeUrls[Math.floor(Math.random() * memeUrls.length)];
-    utilities.logToFile(`Scraper: selected ${selected}`);
-    return selected;
-  } finally {
-    if (page) {
-      try {
-        await page.close();
-      } catch {
-        /* already closed */
-      }
-    }
+  if (!data || !data.url || data.nsfw) {
+    throw new Error('Meme API returned no suitable image');
   }
+
+  // only accept direct image URLs
+  if (!/\.(jpg|jpeg|png)$/i.test(data.url)) {
+    throw new Error('Meme API returned non-image URL');
+  }
+
+  utilities.logToFile(`Scraper: selected ${data.url} (via meme-api)`);
+  return data.url;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Source 2: Reddit JSON API                                          */
+/* ------------------------------------------------------------------ */
+
+async function _fromRedditJson(type) {
+  const subs = SUBREDDIT_POOLS[type] || SUBREDDIT_POOLS.funny;
+  const sub = subs[Math.floor(Math.random() * subs.length)];
+  const sort = ['hot', 'top', 'new'][Math.floor(Math.random() * 3)];
+
+  utilities.logToFile(`Scraper: trying Reddit JSON (r/${sub}/${sort})`);
+
+  const { data } = await axios.get(
+    `https://www.reddit.com/r/${sub}/${sort}.json?limit=50&t=week`,
+    {
+      timeout: 15000,
+      headers: { 'User-Agent': USER_AGENT },
+    }
+  );
+
+  const posts = (data.data.children || [])
+    .map((c) => c.data)
+    .filter(
+      (p) =>
+        !p.over_18 &&
+        !p.stickied &&
+        p.url &&
+        /\.(jpg|jpeg|png)$/i.test(p.url) &&
+        p.ups > 50
+    );
+
+  if (!posts.length) throw new Error('No suitable Reddit posts');
+
+  const pick = posts[Math.floor(Math.random() * Math.min(posts.length, 20))];
+  utilities.logToFile(`Scraper: selected ${pick.url} (via Reddit)`);
+  return pick.url;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Source 3: Pinterest HTML scrape (no browser)                        */
+/* ------------------------------------------------------------------ */
+
+async function _fromPinterestHtml(keyword) {
+  const encoded = encodeURIComponent(keyword);
+  utilities.logToFile(`Scraper: trying Pinterest HTML for "${keyword}"`);
+
+  const { data: html } = await axios.get(
+    `https://www.pinterest.com/search/pins/?q=${encoded}&rs=typed`,
+    {
+      timeout: 30000,
+      headers: {
+        'User-Agent': USER_AGENT,
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+    }
+  );
+
+  // extract pinimg URLs from the raw HTML
+  const regex = /https:\/\/i\.pinimg\.com\/(?:originals|736x|474x|236x)\/[a-f0-9/]+\.(?:jpg|jpeg|png)/gi;
+  const matches = html.match(regex) || [];
+
+  // upgrade to originals
+  const urls = [
+    ...new Set(
+      matches.map((u) =>
+        u
+          .replace('/236x/', '/originals/')
+          .replace('/474x/', '/originals/')
+          .replace('/736x/', '/originals/')
+      )
+    ),
+  ];
+
+  if (!urls.length) throw new Error('No images found on Pinterest');
+
+  const selected = urls[Math.floor(Math.random() * urls.length)];
+  utilities.logToFile(`Scraper: selected ${selected} (via Pinterest HTML)`);
+  return selected;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+function _typeFromKeyword(keyword) {
+  const kw = keyword.toLowerCase();
+  for (const [type, keywords] of Object.entries(KEYWORD_POOLS)) {
+    if (keywords.some((k) => kw.includes(k.split(' ')[0]))) return type;
+  }
+  return 'funny';
 }
 
 /**
@@ -169,7 +221,6 @@ function getRandomKeyword(postType) {
     return { keyword, type: postType };
   }
 
-  // fallback: random type
   const types = Object.keys(KEYWORD_POOLS);
   const type = types[Math.floor(Math.random() * types.length)];
   const pool = KEYWORD_POOLS[type];

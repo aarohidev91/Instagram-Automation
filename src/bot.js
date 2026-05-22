@@ -84,7 +84,7 @@ class MemeBotCore {
       this.rateLimiter.recordAction();
 
       // 3. Scrape
-      const memeUrl = await getSafeMeme(keyword);
+      const memeUrl = await getSafeMeme(keyword, type);
       this.rateLimiter.recordAction();
 
       // 4. Download
