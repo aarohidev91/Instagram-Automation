@@ -139,7 +139,7 @@ function renderRecentPosts(posts) {
   }
   el.innerHTML = posts
     .map(function(p) {
-      return '<div class="post-item"><span class="post-time">' + new Date(p.timestamp).toLocaleString() + '</span><span class="post-type">' + (p.postType || '?') + '</span><br/>' + (p.keyword || '') + '</div>';
+      return '<div class="post-item"><span class="post-time">' + esc(new Date(p.timestamp).toLocaleString()) + '</span><span class="post-type">' + esc(p.postType || '?') + '</span><br/>' + esc(p.keyword || '') + '</div>';
     })
     .join('');
 }
@@ -259,6 +259,12 @@ function saveSettings(e) {
 }
 
 /* ---------- Helpers ------------------------------------------ */
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.appendChild(document.createTextNode(s));
+  return d.innerHTML;
+}
 
 function setQuickStatus(msg, cls) {
   var el = document.getElementById('quickPostStatus');

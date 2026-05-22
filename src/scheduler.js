@@ -110,6 +110,13 @@ class PostScheduler {
     this._running = true;
 
     this.generateDailySlots();
+    this._startCronJobs();
+
+    utilities.logToFile('Scheduler: started');
+  }
+
+  _startCronJobs() {
+    this._stopCronJobs();
 
     this._cronJob = cron.schedule(
       '* * * * *',
@@ -117,7 +124,6 @@ class PostScheduler {
       { timezone: this.timezone }
     );
 
-    // regenerate slots at midnight
     this._midnightJob = cron.schedule(
       '0 0 * * *',
       () => {
@@ -126,14 +132,16 @@ class PostScheduler {
       },
       { timezone: this.timezone }
     );
+  }
 
-    utilities.logToFile('Scheduler: started');
+  _stopCronJobs() {
+    if (this._cronJob) this._cronJob.stop();
+    if (this._midnightJob) this._midnightJob.stop();
   }
 
   stop() {
     this._running = false;
-    if (this._cronJob) this._cronJob.stop();
-    if (this._midnightJob) this._midnightJob.stop();
+    this._stopCronJobs();
     utilities.logToFile('Scheduler: stopped');
   }
 
@@ -189,6 +197,8 @@ class PostScheduler {
 
   /** Update schedule settings and regenerate slots */
   updateSettings(settings) {
+    const tzChanged = settings.timezone && settings.timezone !== this.timezone;
+
     if (settings.postsPerDay !== undefined)
       this.postsPerDay = settings.postsPerDay;
     if (settings.activeHoursStart !== undefined)
@@ -201,6 +211,11 @@ class PostScheduler {
       this.postTypeWeights = settings.postTypeWeights;
 
     this.generateDailySlots();
+
+    if (tzChanged && this._running) {
+      utilities.logToFile(`Scheduler: timezone changed to ${this.timezone}, restarting cron jobs`);
+      this._startCronJobs();
+    }
   }
 }
 
