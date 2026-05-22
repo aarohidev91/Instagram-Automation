@@ -74,12 +74,6 @@ class ConfigManager {
       'Post types (comma-separated, default funny,hinglish,trending): '
     ) || 'funny,hinglish,trending';
 
-    // optional
-    const customPath = await this.prompt(
-      'Custom Chrome path (Enter to skip): '
-    );
-    if (customPath) config.PUPPETEER_EXECUTABLE_PATH = customPath;
-
     const guiPort = await this.prompt(
       'GUI dashboard port (default 3000): '
     ) || '3000';
@@ -189,9 +183,6 @@ class ConfigManager {
       // keep-alive
       renderExternalUrl: ConfigManager.get('RENDER_EXTERNAL_URL', ''),
       keepAliveInterval: ConfigManager.getInt('KEEP_ALIVE_INTERVAL', 10),
-
-      // puppeteer
-      puppeteerPath: ConfigManager.get('PUPPETEER_EXECUTABLE_PATH', ''),
     };
   }
 }
