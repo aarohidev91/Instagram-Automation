@@ -111,7 +111,7 @@ async function _fromMemeApi(type) {
   }
 
   // only accept direct image URLs
-  if (!/\.(jpg|jpeg|png|gif)$/i.test(data.url)) {
+  if (!/\.(jpg|jpeg|png)$/i.test(data.url)) {
     throw new Error('Meme API returned non-image URL');
   }
 
