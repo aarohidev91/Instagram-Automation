@@ -46,45 +46,44 @@ async function normalizeImage(inputBuffer, sourceUrl) {
 
   let { width, height } = meta;
 
-  // scale down if too wide
+  // compute final dimensions in pure math first, then issue one resize
   if (width > MAX_WIDTH) {
     const scale = MAX_WIDTH / width;
+    height = Math.round(height * scale);
     width = MAX_WIDTH;
-    height = Math.round(height * scale);
-    pipeline = pipeline.resize(width, height, { fit: 'inside', withoutEnlargement: false });
-  }
-
-  // scale up if too small
-  if (width < MIN_WIDTH) {
+  } else if (width < MIN_WIDTH) {
     const scale = MIN_WIDTH / width;
-    width = MIN_WIDTH;
     height = Math.round(height * scale);
-    pipeline = pipeline.resize(width, height, { fit: 'inside', withoutEnlargement: false });
+    width = MIN_WIDTH;
   }
 
-  // fix aspect ratio by padding
+  // single resize to target dimensions
+  pipeline = pipeline.resize(width, height, { fit: 'fill', withoutEnlargement: false });
+
+  // fix aspect ratio by padding (after resize is settled)
   const ratio = width / height;
+  let extendOpts = null;
 
   if (ratio > MAX_RATIO) {
-    // too wide → pad vertically to 1.91:1
     const newHeight = Math.round(width / MAX_RATIO);
-    pipeline = pipeline.resize(width, null, { fit: 'inside', withoutEnlargement: true });
-    pipeline = pipeline.extend({
+    extendOpts = {
       top: Math.floor((newHeight - height) / 2),
       bottom: Math.ceil((newHeight - height) / 2),
       background: { r: 255, g: 255, b: 255 },
-    });
+    };
     height = newHeight;
   } else if (ratio < MIN_RATIO) {
-    // too tall → pad horizontally to 4:5
     const newWidth = Math.round(height * MIN_RATIO);
-    pipeline = pipeline.resize(null, height, { fit: 'inside', withoutEnlargement: true });
-    pipeline = pipeline.extend({
+    extendOpts = {
       left: Math.floor((newWidth - width) / 2),
       right: Math.ceil((newWidth - width) / 2),
       background: { r: 255, g: 255, b: 255 },
-    });
+    };
     width = newWidth;
+  }
+
+  if (extendOpts) {
+    pipeline = pipeline.extend(extendOpts);
   }
 
   // output as JPEG, strip metadata

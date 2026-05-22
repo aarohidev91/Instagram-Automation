@@ -86,6 +86,18 @@ describe('normalizeImage', () => {
     expect(outMeta.width).toBeGreaterThanOrEqual(320);
   });
 
+  test('handles small image with extreme aspect ratio (both scale-up and padding)', async () => {
+    // 200x800 = width < MIN_WIDTH (320) AND ratio 0.25 < MIN_RATIO (0.8)
+    const img = await createTestImage('png', 200, 800);
+    const { buffer } = await normalizeImage(img, 'http://test/small-tall.png');
+
+    const outMeta = await sharp(buffer).metadata();
+    expect(outMeta.width).toBeGreaterThanOrEqual(320);
+    const ratio = outMeta.width / outMeta.height;
+    expect(ratio).toBeGreaterThanOrEqual(0.79);
+    expect(outMeta.format).toBe('jpeg');
+  });
+
   test('output buffer is non-empty', async () => {
     const img = await createTestImage('png', 800, 600);
     const { buffer } = await normalizeImage(img, 'http://test/test.png');
