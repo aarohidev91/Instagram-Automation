@@ -115,6 +115,10 @@ dist
 ig-session.json
 *.session
 
+# Bot data & logs
+data/
+logs/
+
 # Downloaded meme files
 meme_*.jpg
 meme_*.png

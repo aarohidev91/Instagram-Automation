@@ -1,0 +1,98 @@
+/* ======= Reset & Base ======= */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0f1117;--surface:#181b23;--surface2:#21242f;
+  --border:#2d3148;--text:#e4e6ef;--muted:#6b7394;
+  --primary:#6366f1;--success:#22c55e;--danger:#ef4444;
+  --warning:#f59e0b;--info:#3b82f6;
+  --radius:12px;--shadow:0 2px 12px rgba(0,0,0,.35);
+}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+
+/* ======= Layout ======= */
+.container{max-width:1280px;margin:0 auto;padding:20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:20px;margin-top:20px}
+.panel.wide{grid-column:1/-1}
+
+/* ======= Header ======= */
+.header{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:20px 24px;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow)}
+.header h1{font-size:1.5rem;background:linear-gradient(135deg,var(--primary),var(--info));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.header-controls{display:flex;gap:10px;align-items:center}
+
+/* ======= Badges ======= */
+.badge{padding:4px 14px;border-radius:20px;font-size:.8rem;font-weight:600;text-transform:uppercase}
+.badge-idle{background:var(--muted);color:#fff}
+.badge-running{background:var(--success);color:#fff}
+.badge-error{background:var(--danger);color:#fff}
+.badge-safe{background:var(--warning);color:#000}
+
+/* ======= Buttons ======= */
+.btn{padding:8px 18px;border:none;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;transition:opacity .2s}
+.btn:hover{opacity:.85}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-success{background:var(--success);color:#fff}
+.btn-danger{background:var(--danger);color:#fff}
+.btn-warning{background:var(--warning);color:#000}
+
+/* ======= Cards ======= */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:20px}
+.card{display:flex;align-items:center;gap:16px;padding:20px;background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow)}
+.card-icon{font-size:2.2rem}
+.card-body h3{font-size:1.6rem;font-weight:700}
+.card-body p{color:var(--muted);font-size:.85rem}
+
+/* ======= Panels ======= */
+.panel{background:var(--surface);border-radius:var(--radius);padding:20px 24px;box-shadow:var(--shadow)}
+.panel h2{font-size:1.1rem;margin-bottom:14px;color:var(--info)}
+
+/* ======= Settings Form ======= */
+#settingsForm{display:flex;flex-direction:column;gap:12px}
+#settingsForm label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:var(--muted)}
+#settingsForm input[type="number"],
+#settingsForm input[type="text"]{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);color:var(--text);font-size:.9rem}
+.checkbox-label{flex-direction:row!important;align-items:center;gap:8px!important}
+.checkbox-label input{width:18px;height:18px}
+
+/* ======= Schedule List ======= */
+.schedule-list{display:flex;flex-direction:column;gap:8px}
+.slot{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:.9rem}
+.slot .time{font-weight:600;color:var(--primary)}
+.slot .type{color:var(--muted);text-transform:capitalize}
+
+/* ======= Safety Info ======= */
+.safety-info{display:flex;flex-direction:column;gap:10px}
+.safety-row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);font-size:.9rem}
+.safety-row:last-child{border-bottom:none}
+.safety-label{color:var(--muted)}
+.safety-value{font-weight:600}
+.safety-value.ok{color:var(--success)}
+.safety-value.warn{color:var(--warning)}
+.safety-value.bad{color:var(--danger)}
+
+/* ======= Recent Posts ======= */
+.recent-list{display:flex;flex-direction:column;gap:8px;max-height:320px;overflow-y:auto}
+.post-item{padding:10px 14px;background:var(--surface2);border-radius:8px;font-size:.85rem}
+.post-item .post-time{color:var(--muted);font-size:.75rem}
+.post-item .post-type{display:inline-block;background:var(--primary);color:#fff;padding:2px 8px;border-radius:12px;font-size:.7rem;margin-left:6px;text-transform:capitalize}
+
+/* ======= Chart ======= */
+.chart{display:flex;align-items:flex-end;gap:12px;height:160px;padding:16px 0}
+.bar-group{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px}
+.bar{width:100%;max-width:60px;background:linear-gradient(180deg,var(--primary),var(--info));border-radius:6px 6px 0 0;min-height:4px;transition:height .4s}
+.bar-label{font-size:.7rem;color:var(--muted)}
+.bar-count{font-size:.75rem;font-weight:600}
+
+/* ======= Logs ======= */
+.logs-panel{max-height:300px;overflow-y:auto;background:var(--surface2);border-radius:8px;padding:14px;font-family:'Fira Code',monospace,monospace;font-size:.78rem;line-height:1.8;white-space:pre-wrap;word-break:break-all;color:var(--muted)}
+
+/* ======= Footer ======= */
+.footer{text-align:center;padding:20px;color:var(--muted);font-size:.8rem;margin-top:20px}
+
+.muted{color:var(--muted);font-size:.9rem}
+
+/* ======= Responsive ======= */
+@media(max-width:600px){
+  .header{flex-direction:column;text-align:center}
+  .cards{grid-template-columns:1fr 1fr}
+  .grid{grid-template-columns:1fr}
+}
