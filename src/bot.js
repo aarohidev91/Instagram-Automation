@@ -135,10 +135,6 @@ class MemeBotCore {
   /* ------------------------------------------------------------------ */
 
   async runCycleImmediate(keyword, postType) {
-    // clear any active safe mode so this post goes through
-    this.accountGuard.clearSafeMode();
-    this.rateLimiter.clearCooldown();
-
     let tempFile;
     try {
       const { keyword: kw, type } = keyword
