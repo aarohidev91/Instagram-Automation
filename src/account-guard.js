@@ -142,6 +142,13 @@ class AccountGuard {
     this._save();
   }
 
+  clearSafeMode() {
+    this.state.safeModeUntil = 0;
+    this.state.consecutiveErrors = 0;
+    this._save();
+    utilities.logToFile('AccountGuard: safe mode cleared manually');
+  }
+
   /* ----- main gate -------------------------------------------------- */
 
   /**
