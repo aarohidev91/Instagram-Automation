@@ -63,14 +63,7 @@ class InstagramPoster {
         await this.ig.state.deserialize(saved);
         utilities.logToFile('Instagram: restored session');
       } else {
-        utilities.logToFile('Instagram: logging in...');
-        await utilities.randomDelay(2000, 4000);
-        await this.ig.account.login(
-          process.env.INSTA_USERNAME,
-          process.env.INSTA_PASSWORD
-        );
-        await this._saveSession();
-        utilities.logToFile('Instagram: logged in and saved session');
+        await this._fullLogin();
       }
     } catch (error) {
       utilities.logToFile(
@@ -90,6 +83,21 @@ class InstagramPoster {
       }
       throw error;
     }
+  }
+
+  async _fullLogin() {
+    utilities.logToFile('Instagram: logging in with full simulation...');
+    await this.ig.simulate.preLoginFlow();
+    await utilities.randomDelay(2000, 4000);
+    await this.ig.account.login(
+      process.env.INSTA_USERNAME,
+      process.env.INSTA_PASSWORD
+    );
+    // post-login simulation — run in background, don't block
+    this.ig.simulate.postLoginFlow().catch(() => {});
+    await utilities.randomDelay(2000, 4000);
+    await this._saveSession();
+    utilities.logToFile('Instagram: logged in and saved session');
   }
 
   async _saveSession() {
@@ -178,12 +186,7 @@ class InstagramPoster {
     utilities.cleanupFile(this.sessionPath);
     this.ig = new IgApiClient();
     this.ig.state.generateDevice(process.env.INSTA_USERNAME);
-    await utilities.randomDelay(2000, 4000);
-    await this.ig.account.login(
-      process.env.INSTA_USERNAME,
-      process.env.INSTA_PASSWORD
-    );
-    await this._saveSession();
+    await this._fullLogin();
     utilities.logToFile('Instagram: re-login successful');
   }
 }
