@@ -136,7 +136,7 @@ class InstagramPoster {
         await this._reLogin();
         return await this._attemptPost(fileData, caption);
       }
-      throw this._handlePostError(error);
+      throw error;
     }
   }
 
