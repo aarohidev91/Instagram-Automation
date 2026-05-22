@@ -190,16 +190,20 @@ class AccountGuard {
     return { allowed: true };
   }
 
-  /** Block until it's safe to post */
+  /** Block until it's safe to post (checks every 60s so clears take effect quickly) */
   async waitForSafeWindow() {
     let check = this.canPost();
+    let lastLoggedReason = '';
     while (!check.allowed) {
-      const jitter = Math.random() * 5 * 60 * 1000; // 0-5 min jitter
-      const waitMs = Math.min(check.retryAfter + jitter, 8 * 60 * 60 * 1000);
-      utilities.logToFile(
-        `AccountGuard: waiting ${Math.round(waitMs / 60000)} min (${check.reason})`
-      );
-      await utilities.delay(waitMs);
+      if (check.reason !== lastLoggedReason) {
+        utilities.logToFile(
+          `AccountGuard: waiting ~${Math.round(check.retryAfter / 60000)} min (${check.reason})`
+        );
+        lastLoggedReason = check.reason;
+      }
+      await utilities.delay(60000);
+      // re-read state from disk in case clearSafeMode() was called
+      this.state = this._load();
       check = this.canPost();
     }
   }

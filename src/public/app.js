@@ -193,8 +193,8 @@ function clearSafeMode() {
 }
 
 function postNow() {
-  if (!confirm('Post a random meme right now? (bypasses schedule restrictions)')) return;
-  setQuickStatus('Posting random meme...', 'posting');
+  setQuickStatus('Finding and posting a random meme...', 'posting');
+  disablePostButtons(true);
 
   fetch(API + '/api/post-now', { method: 'POST' })
     .then(function(res) { return res.json(); })
@@ -202,12 +202,14 @@ function postNow() {
       if (data.error) {
         setQuickStatus('Error: ' + data.error, 'error');
       } else {
-        setQuickStatus('Posted successfully! Type: ' + (data.result && data.result.type || 'unknown'), 'success');
+        setQuickStatus('Posted! Type: ' + (data.result && data.result.type || 'unknown'), 'success');
       }
+      disablePostButtons(false);
       refresh();
     })
     .catch(function(err) {
       setQuickStatus('Failed: ' + err.message, 'error');
+      disablePostButtons(false);
     });
 }
 
@@ -216,14 +218,13 @@ function quickPost() {
   var postType = document.getElementById('quickPostType').value;
 
   if (!term && !postType) {
-    alert('Please enter a search term or select a post type');
+    setQuickStatus('Please enter a search term or select a post type', 'error');
     return;
   }
 
-  var msg = term ? 'Search & post "' + term + '"' : 'Post a "' + postType + '" meme';
-  if (!confirm(msg + ' right now?')) return;
-
-  setQuickStatus('Searching and posting...', 'posting');
+  var label = term ? '"' + term + '"' : postType;
+  setQuickStatus('Searching ' + label + ' and posting...', 'posting');
+  disablePostButtons(true);
 
   fetch(API + '/api/post-now', {
     method: 'POST',
@@ -237,10 +238,12 @@ function quickPost() {
       } else {
         setQuickStatus('Posted! Keyword: ' + (data.result && data.result.keyword || term) + ', Type: ' + (data.result && data.result.type || postType || 'auto'), 'success');
       }
+      disablePostButtons(false);
       refresh();
     })
     .catch(function(err) {
       setQuickStatus('Failed: ' + err.message, 'error');
+      disablePostButtons(false);
     });
 }
 
@@ -275,6 +278,11 @@ function esc(s) {
   var d = document.createElement('div');
   d.appendChild(document.createTextNode(s));
   return d.innerHTML;
+}
+
+function disablePostButtons(disabled) {
+  var btns = document.querySelectorAll('.quick-post-row .btn');
+  for (var i = 0; i < btns.length; i++) btns[i].disabled = disabled;
 }
 
 function setQuickStatus(msg, cls) {
