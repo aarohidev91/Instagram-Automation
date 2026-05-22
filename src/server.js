@@ -74,6 +74,17 @@ function createServer(bot) {
     res.json({ ok: true, status: 'stopped' });
   });
 
+  /* ---- clear safe mode --------------------------------------------- */
+  app.post('/api/clear-safe-mode', (_req, res) => {
+    try {
+      bot.accountGuard.clearSafeMode();
+      bot.rateLimiter.clearCooldown();
+      res.json({ ok: true, message: 'Safe mode and cooldown cleared' });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   /* ---- rate-limiter stats ----------------------------------------- */
   app.get('/api/rate-limiter', (_req, res) => {
     res.json(bot.rateLimiter.getStats());

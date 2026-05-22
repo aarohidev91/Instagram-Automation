@@ -137,28 +137,11 @@ class MemeBotCore {
   async runCycleImmediate(keyword, postType) {
     let tempFile;
     try {
-      if (keyword) {
-        const type = postType || 'funny';
-        utilities.logToFile(`Bot: immediate post – keyword="${keyword}" type="${type}"`);
-        const memeUrl = await getSafeMeme(keyword, type);
-        tempFile = path.join(process.cwd(), `meme_${Date.now()}.jpg`);
-        await this._downloadImage(memeUrl, tempFile);
-        utilities.logToFile('Bot: posting to Instagram (immediate)...');
-        const result = await this.instagramPoster.postImage(tempFile);
-        this.rateLimiter.recordPost();
-        this.accountGuard.recordSuccess();
-        this.analytics.recordPost({
-          postType: type,
-          keyword,
-          memeUrl,
-          caption: result.caption,
-        });
-        utilities.logToFile('Bot: immediate post complete!');
-        return { success: true, type, keyword };
-      }
+      const { keyword: kw, type } = keyword
+        ? { keyword, type: postType || 'funny' }
+        : getRandomKeyword(postType);
 
-      const { keyword: kw, type } = getRandomKeyword(postType);
-      utilities.logToFile(`Bot: immediate post – type="${type}"`);
+      utilities.logToFile(`Bot: immediate post – keyword="${kw}" type="${type}"`);
       const memeUrl = await getSafeMeme(kw, type);
       tempFile = path.join(process.cwd(), `meme_${Date.now()}.jpg`);
       await this._downloadImage(memeUrl, tempFile);

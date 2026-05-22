@@ -181,6 +181,17 @@ function stopBot() {
     .catch(function(err) { alert('Failed to stop bot: ' + err.message); });
 }
 
+function clearSafeMode() {
+  fetch(API + '/api/clear-safe-mode', { method: 'POST' })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.ok) alert('Safe mode cleared! Bot will resume normal operation.');
+      else alert('Error: ' + (data.error || 'unknown'));
+      refresh();
+    })
+    .catch(function(err) { alert('Failed: ' + err.message); });
+}
+
 function postNow() {
   if (!confirm('Post a random meme right now? (bypasses schedule restrictions)')) return;
   setQuickStatus('Posting random meme...', 'posting');

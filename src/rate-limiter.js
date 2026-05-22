@@ -92,6 +92,12 @@ class RateLimiter {
     );
   }
 
+  /** Clear any active cooldown */
+  clearCooldown() {
+    this.state.cooldownUntil = 0;
+    this._save();
+  }
+
   /** Can we perform a generic action right now? */
   canAct() {
     if (Date.now() < this.state.cooldownUntil) {
