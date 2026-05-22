@@ -50,11 +50,33 @@
       </div>
     </section>
 
+    <!-- Quick Post Panel -->
+    <section class="panel wide quick-post-panel">
+      <h2>Quick Post</h2>
+      <p class="muted">Search any term and post it instantly to Instagram — bypasses all schedule/rate-limit restrictions</p>
+      <div class="quick-post-row">
+        <input type="text" id="searchTerm" placeholder="e.g. cat memes, cricket funny, coding jokes..." class="search-input" />
+        <select id="quickPostType" class="search-select">
+          <option value="">Auto Detect</option>
+          <option value="funny">Funny</option>
+          <option value="hinglish">Hinglish</option>
+          <option value="trending">Trending</option>
+          <option value="desi">Desi</option>
+          <option value="relatable">Relatable</option>
+          <option value="programming">Programming</option>
+        </select>
+        <button class="btn btn-primary" onclick="quickPost()">Search &amp; Post Now</button>
+        <button class="btn btn-warning" onclick="postNow()">Random Post Now</button>
+      </div>
+      <div id="quickPostStatus" class="quick-status"></div>
+    </section>
+
     <!-- Main Grid -->
     <div class="grid">
       <!-- Schedule Panel -->
       <section class="panel">
         <h2>Today's Schedule</h2>
+        <div id="currentTime" class="current-time"></div>
         <div id="scheduleList" class="schedule-list">
           <p class="muted">Loading...</p>
         </div>
@@ -81,6 +103,9 @@
           <label>Active Hours End
             <input type="number" id="setActiveEnd" min="0" max="23" value="23" />
           </label>
+          <label>Timezone
+            <input type="text" id="setTimezone" value="Asia/Kolkata" placeholder="e.g. Asia/Kolkata" />
+          </label>
           <label>Post Types
             <input type="text" id="setPostTypes" value="funny,hinglish,trending" placeholder="comma-separated" />
           </label>
@@ -92,7 +117,6 @@
             Reduce posting on weekends
           </label>
           <button type="submit" class="btn btn-primary">Save Settings</button>
-          <button type="button" class="btn btn-warning" onclick="postNow()">Post Now</button>
         </form>
       </section>
 

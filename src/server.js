@@ -49,9 +49,10 @@ function createServer(bot) {
   });
 
   /* ---- manual trigger --------------------------------------------- */
-  app.post('/api/post-now', async (_req, res) => {
+  app.post('/api/post-now', async (req, res) => {
     try {
-      const result = await bot.runCycle();
+      const { keyword, postType } = req.body || {};
+      const result = await bot.runCycleImmediate(keyword, postType);
       res.json({ ok: true, result });
     } catch (err) {
       res.status(500).json({ error: err.message });
@@ -101,7 +102,6 @@ function createServer(bot) {
   app.get('/api/settings', (_req, res) => {
     const ConfigManager = require('./config');
     const cfg = ConfigManager.getAll();
-    // never expose password
     delete cfg.password;
     res.json(cfg);
   });
@@ -112,6 +112,7 @@ function createServer(bot) {
         'postsPerDay',
         'activeHoursStart',
         'activeHoursEnd',
+        'timezone',
         'postTypes',
         'maxPostsPerDay',
         'minPostIntervalMin',
@@ -124,7 +125,10 @@ function createServer(bot) {
         if (req.body[key] !== undefined) update[key] = req.body[key];
       }
       // apply to scheduler (any scheduling-relevant key)
-      const schedulerKeys = ['postsPerDay', 'activeHoursStart', 'activeHoursEnd', 'postTypes'];
+      const schedulerKeys = [
+        'postsPerDay', 'activeHoursStart', 'activeHoursEnd',
+        'postTypes', 'timezone',
+      ];
       if (schedulerKeys.some((k) => update[k] !== undefined)) {
         bot.scheduler.updateSettings(update);
       }
@@ -135,7 +139,10 @@ function createServer(bot) {
         });
       }
       // apply to account guard
-      const guardKeys = ['activeHoursStart', 'activeHoursEnd', 'enableWeekendPause', 'weekendMaxPosts'];
+      const guardKeys = [
+        'activeHoursStart', 'activeHoursEnd',
+        'enableWeekendPause', 'weekendMaxPosts', 'timezone',
+      ];
       if (guardKeys.some((k) => update[k] !== undefined)) {
         bot.accountGuard.updateConfig(update);
       }

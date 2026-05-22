@@ -230,7 +230,7 @@ class AccountGuard {
     const keys = [
       'activeHoursStart', 'activeHoursEnd', 'enableWeekendPause',
       'weekendMaxPosts', 'warmUpDays', 'safeModeHours',
-      'maxConsecutiveErrors',
+      'maxConsecutiveErrors', 'timezone',
     ];
     for (const key of keys) {
       if (newConfig[key] !== undefined) this.config[key] = newConfig[key];

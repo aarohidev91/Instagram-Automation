@@ -4,18 +4,21 @@
 
 const API = '';
 let refreshTimer = null;
+let serverTimezone = 'Asia/Kolkata';
 
 /* ---------- Bootstrap ---------------------------------------- */
 document.addEventListener('DOMContentLoaded', () => {
   refresh();
-  refreshTimer = setInterval(refresh, 10000); // every 10 s
+  refreshTimer = setInterval(refresh, 10000);
+  setInterval(updateClock, 1000);
+  updateClock();
 });
 
 async function refresh() {
   try {
     const [status, logs] = await Promise.all([
-      fetch(`${API}/api/status`).then((r) => r.json()),
-      fetch(`${API}/api/logs`).then((r) => r.json()),
+      fetch(API + '/api/status').then(function(r) { return r.json(); }),
+      fetch(API + '/api/logs').then(function(r) { return r.json(); }),
     ]);
     renderStatus(status);
     renderLogs(logs.logs || []);
@@ -24,184 +27,258 @@ async function refresh() {
   }
 }
 
+/* ---------- Clock -------------------------------------------- */
+
+function updateClock() {
+  var el = document.getElementById('currentTime');
+  if (!el) return;
+  try {
+    var now = new Date().toLocaleString('en-IN', {
+      timeZone: serverTimezone,
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
+    el.textContent = 'Current Time (' + serverTimezone + '): ' + now;
+  } catch (e) {
+    el.textContent = 'Current Time: ' + new Date().toLocaleTimeString();
+  }
+}
+
 /* ---------- Render functions --------------------------------- */
 
 function renderStatus(data) {
-  // badge
-  const badge = document.getElementById('statusBadge');
+  var badge = document.getElementById('statusBadge');
   badge.textContent = data.status || 'idle';
   badge.className = 'badge badge-' + (data.status === 'running' ? 'running' : data.status === 'error' ? 'error' : 'idle');
 
-  // stat cards
-  const a = data.analytics || {};
-  setText('postsToday', a.postsToday ?? 0);
-  setText('postsWeek', a.postsThisWeek ?? 0);
-  setText('successRate', (a.successRate ?? 100) + '%');
+  var a = data.analytics || {};
+  setText('postsToday', a.postsToday != null ? a.postsToday : 0);
+  setText('postsWeek', a.postsThisWeek != null ? a.postsThisWeek : 0);
+  setText('successRate', (a.successRate != null ? a.successRate : 100) + '%');
   setText('uptime', formatMs(a.uptimeMs || 0));
 
-  // schedule
-  renderSchedule(data.scheduler || {});
-
-  // safety
+  var sched = data.scheduler || {};
+  if (sched.timezone) serverTimezone = sched.timezone;
+  renderSchedule(sched);
   renderSafety(data.accountGuard || {}, data.rateLimiter || {});
-
-  // recent posts
   renderRecentPosts(a.recentPosts || []);
-
-  // chart
   renderChart(a.dailyCounts || {});
 
-  // settings form defaults
-  const s = data.scheduler || {};
-  const rl = data.rateLimiter || {};
-  setVal('setPostsPerDay', s.postsPerDay);
-  if (s.activeWindow) {
-    const parts = s.activeWindow.split('–').map((x) => parseInt(x));
+  setVal('setPostsPerDay', sched.postsPerDay);
+  if (sched.timezone) setVal('setTimezone', sched.timezone);
+  if (sched.activeWindow) {
+    var parts = sched.activeWindow.split('\u2013').map(function(x) { return parseInt(x); });
     if (parts.length === 2) {
       setVal('setActiveStart', parts[0]);
       setVal('setActiveEnd', parts[1]);
     }
   }
-  if (s.postTypes) setVal('setPostTypes', s.postTypes.join(','));
+  if (sched.postTypes) setVal('setPostTypes', sched.postTypes.join(','));
+  var rl = data.rateLimiter || {};
   if (rl.limits) setVal('setMaxPosts', rl.limits.postsPerDay);
 }
 
 function renderSchedule(sched) {
-  const el = document.getElementById('scheduleList');
-  const slots = sched.todaysSlots || [];
+  var el = document.getElementById('scheduleList');
+  var slots = sched.todaysSlots || [];
   if (!slots.length) {
     el.innerHTML = '<p class="muted">No slots remaining today</p>';
     return;
   }
+
+  var now;
+  try {
+    var nowStr = new Date().toLocaleString('en-US', { timeZone: serverTimezone });
+    now = new Date(nowStr);
+  } catch (e) {
+    now = new Date();
+  }
+  var currentHour = now.getHours();
+  var currentMinute = now.getMinutes();
+
   el.innerHTML = slots
-    .map(
-      (s) =>
-        `<div class="slot"><span class="time">${pad(s.hour)}:${pad(s.minute)}</span><span class="type">${s.postType || 'auto'}</span></div>`
-    )
+    .map(function(s) {
+      var slotMin = s.hour * 60 + s.minute;
+      var nowMin = currentHour * 60 + currentMinute;
+      var cls = 'slot';
+      if (slotMin < nowMin - 1) cls += ' done';
+      else if (Math.abs(slotMin - nowMin) <= 1) cls += ' active';
+      return '<div class="' + cls + '"><span class="time">' + pad(s.hour) + ':' + pad(s.minute) + '</span><span class="type">' + (s.postType || 'auto') + '</span></div>';
+    })
     .join('');
 }
 
 function renderSafety(guard, rl) {
-  const el = document.getElementById('safetyInfo');
-  const rows = [
+  var el = document.getElementById('safetyInfo');
+  var rows = [
     ['Active Hours', guard.isActiveHour ? 'Yes' : 'No', guard.isActiveHour ? 'ok' : 'warn'],
     ['Safe Mode', guard.safeModeActive ? 'ACTIVE' : 'Off', guard.safeModeActive ? 'bad' : 'ok'],
-    ['Consecutive Errors', guard.consecutiveErrors ?? 0, (guard.consecutiveErrors || 0) > 2 ? 'bad' : 'ok'],
+    ['Consecutive Errors', guard.consecutiveErrors != null ? guard.consecutiveErrors : 0, (guard.consecutiveErrors || 0) > 2 ? 'bad' : 'ok'],
     ['Warm-up', Math.round((guard.warmUpMultiplier || 1) * 100) + '%', (guard.warmUpMultiplier || 1) < 1 ? 'warn' : 'ok'],
     ['Cooldown', rl.cooldownActive ? formatMs(rl.cooldownRemaining || 0) : 'None', rl.cooldownActive ? 'warn' : 'ok'],
-    ['Posts Today / Limit', `${rl.postsToday || 0} / ${(rl.limits || {}).postsPerDay || 5}`, 'ok'],
-    ['Total Posts', guard.totalPosts ?? 0, 'ok'],
-    ['Checkpoints', guard.checkpointCount ?? 0, (guard.checkpointCount || 0) > 0 ? 'bad' : 'ok'],
+    ['Posts Today / Limit', (rl.postsToday || 0) + ' / ' + ((rl.limits || {}).postsPerDay || 5), 'ok'],
+    ['Total Posts', guard.totalPosts != null ? guard.totalPosts : 0, 'ok'],
+    ['Checkpoints', guard.checkpointCount != null ? guard.checkpointCount : 0, (guard.checkpointCount || 0) > 0 ? 'bad' : 'ok'],
     ['Weekend', guard.isWeekend ? 'Yes' : 'No', 'ok'],
   ];
   el.innerHTML = rows
-    .map(
-      ([label, value, cls]) =>
-        `<div class="safety-row"><span class="safety-label">${label}</span><span class="safety-value ${cls}">${value}</span></div>`
-    )
+    .map(function(r) {
+      return '<div class="safety-row"><span class="safety-label">' + r[0] + '</span><span class="safety-value ' + r[2] + '">' + r[1] + '</span></div>';
+    })
     .join('');
 }
 
 function renderRecentPosts(posts) {
-  const el = document.getElementById('recentPosts');
+  var el = document.getElementById('recentPosts');
   if (!posts.length) {
     el.innerHTML = '<p class="muted">No posts yet</p>';
     return;
   }
   el.innerHTML = posts
-    .map(
-      (p) =>
-        `<div class="post-item"><span class="post-time">${new Date(p.timestamp).toLocaleString()}</span><span class="post-type">${p.postType || '?'}</span><br/>${p.keyword || ''}</div>`
-    )
+    .map(function(p) {
+      return '<div class="post-item"><span class="post-time">' + esc(new Date(p.timestamp).toLocaleString()) + '</span><span class="post-type">' + esc(p.postType || '?') + '</span><br/>' + esc(p.keyword || '') + '</div>';
+    })
     .join('');
 }
 
 function renderChart(counts) {
-  const el = document.getElementById('weeklyChart');
-  const dates = Object.keys(counts).sort();
+  var el = document.getElementById('weeklyChart');
+  var dates = Object.keys(counts).sort();
   if (!dates.length) {
     el.innerHTML = '<p class="muted">No data yet</p>';
     return;
   }
-  const max = Math.max(...Object.values(counts), 1);
+  var max = Math.max.apply(null, dates.map(function(d) { return counts[d]; }).concat([1]));
   el.innerHTML = dates
-    .map((d) => {
-      const h = Math.max(4, (counts[d] / max) * 130);
-      const label = d.slice(5); // MM-DD
-      return `<div class="bar-group"><span class="bar-count">${counts[d]}</span><div class="bar" style="height:${h}px"></div><span class="bar-label">${label}</span></div>`;
+    .map(function(d) {
+      var h = Math.max(4, (counts[d] / max) * 130);
+      var label = d.slice(5);
+      return '<div class="bar-group"><span class="bar-count">' + counts[d] + '</span><div class="bar" style="height:' + h + 'px"></div><span class="bar-label">' + label + '</span></div>';
     })
     .join('');
 }
 
 function renderLogs(lines) {
-  const el = document.getElementById('logsPanel');
+  var el = document.getElementById('logsPanel');
   el.textContent = lines.slice(-60).join('\n') || 'No logs yet';
   el.scrollTop = el.scrollHeight;
 }
 
 /* ---------- Actions ------------------------------------------ */
 
-async function startBot() {
-  try {
-    await fetch(`${API}/api/bot/start`, { method: 'POST' });
-    refresh();
-  } catch (err) {
-    alert('Failed to start bot: ' + err.message);
-  }
+function startBot() {
+  fetch(API + '/api/bot/start', { method: 'POST' })
+    .then(function() { refresh(); })
+    .catch(function(err) { alert('Failed to start bot: ' + err.message); });
 }
 
-async function stopBot() {
-  try {
-    await fetch(`${API}/api/bot/stop`, { method: 'POST' });
-    refresh();
-  } catch (err) {
-    alert('Failed to stop bot: ' + err.message);
-  }
+function stopBot() {
+  fetch(API + '/api/bot/stop', { method: 'POST' })
+    .then(function() { refresh(); })
+    .catch(function(err) { alert('Failed to stop bot: ' + err.message); });
 }
 
-async function postNow() {
-  if (!confirm('Post a meme right now?')) return;
-  try {
-    const res = await fetch(`${API}/api/post-now`, { method: 'POST' });
-    const data = await res.json();
-    if (data.error) alert('Error: ' + data.error);
-    else alert('Post sent!');
-    refresh();
-  } catch (err) {
-    alert('Failed: ' + err.message);
-  }
+function postNow() {
+  if (!confirm('Post a random meme right now? (bypasses schedule restrictions)')) return;
+  setQuickStatus('Posting random meme...', 'posting');
+
+  fetch(API + '/api/post-now', { method: 'POST' })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.error) {
+        setQuickStatus('Error: ' + data.error, 'error');
+      } else {
+        setQuickStatus('Posted successfully! Type: ' + (data.result && data.result.type || 'unknown'), 'success');
+      }
+      refresh();
+    })
+    .catch(function(err) {
+      setQuickStatus('Failed: ' + err.message, 'error');
+    });
 }
 
-async function saveSettings(e) {
+function quickPost() {
+  var term = document.getElementById('searchTerm').value.trim();
+  var postType = document.getElementById('quickPostType').value;
+
+  if (!term && !postType) {
+    alert('Please enter a search term or select a post type');
+    return;
+  }
+
+  var msg = term ? 'Search & post "' + term + '"' : 'Post a "' + postType + '" meme';
+  if (!confirm(msg + ' right now?')) return;
+
+  setQuickStatus('Searching and posting...', 'posting');
+
+  fetch(API + '/api/post-now', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ keyword: term, postType: postType }),
+  })
+    .then(function(res) { return res.json(); })
+    .then(function(data) {
+      if (data.error) {
+        setQuickStatus('Error: ' + data.error, 'error');
+      } else {
+        setQuickStatus('Posted! Keyword: ' + (data.result && data.result.keyword || term) + ', Type: ' + (data.result && data.result.type || postType || 'auto'), 'success');
+      }
+      refresh();
+    })
+    .catch(function(err) {
+      setQuickStatus('Failed: ' + err.message, 'error');
+    });
+}
+
+function saveSettings(e) {
   e.preventDefault();
-  const body = {
+  var body = {
     postsPerDay: parseInt(document.getElementById('setPostsPerDay').value, 10),
     activeHoursStart: parseInt(document.getElementById('setActiveStart').value, 10),
     activeHoursEnd: parseInt(document.getElementById('setActiveEnd').value, 10),
-    postTypes: document.getElementById('setPostTypes').value.split(',').map((s) => s.trim()).filter(Boolean),
+    timezone: document.getElementById('setTimezone').value.trim(),
+    postTypes: document.getElementById('setPostTypes').value.split(',').map(function(s) { return s.trim(); }).filter(Boolean),
     maxPostsPerDay: parseInt(document.getElementById('setMaxPosts').value, 10),
     enableWeekendPause: document.getElementById('setWeekendPause').checked,
   };
-  try {
-    await fetch(`${API}/api/settings`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+  fetch(API + '/api/settings', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+    .then(function() {
+      alert('Settings saved!');
+      refresh();
+    })
+    .catch(function(err) {
+      alert('Failed: ' + err.message);
     });
-    alert('Settings saved!');
-    refresh();
-  } catch (err) {
-    alert('Failed: ' + err.message);
-  }
 }
 
 /* ---------- Helpers ------------------------------------------ */
+
+function esc(s) {
+  var d = document.createElement('div');
+  d.appendChild(document.createTextNode(s));
+  return d.innerHTML;
+}
+
+function setQuickStatus(msg, cls) {
+  var el = document.getElementById('quickPostStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'quick-status ' + (cls || '');
+}
+
 function setText(id, v) {
-  const el = document.getElementById(id);
+  var el = document.getElementById(id);
   if (el) el.textContent = v;
 }
 function setVal(id, v) {
-  const el = document.getElementById(id);
+  var el = document.getElementById(id);
   if (el && v !== undefined) el.value = v;
 }
 function pad(n) {
