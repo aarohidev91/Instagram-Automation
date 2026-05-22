@@ -110,8 +110,8 @@ async function _fromMemeApi(type) {
     throw new Error('Meme API returned no suitable image');
   }
 
-  // only accept direct image URLs
-  if (!/\.(jpg|jpeg|png)$/i.test(data.url)) {
+  // only accept direct image URLs (including webp – will be normalized to JPEG later)
+  if (!/\.(jpg|jpeg|png|webp)$/i.test(data.url)) {
     throw new Error('Meme API returned non-image URL');
   }
 
@@ -145,7 +145,7 @@ async function _fromRedditJson(type) {
         !p.over_18 &&
         !p.stickied &&
         p.url &&
-        /\.(jpg|jpeg|png)$/i.test(p.url) &&
+        /\.(jpg|jpeg|png|webp)$/i.test(p.url) &&
         p.ups > 50
     );
 

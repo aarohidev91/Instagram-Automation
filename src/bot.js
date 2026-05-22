@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const utilities = require('./utils');
 const { getSafeMeme, getRandomKeyword } = require('./scraper');
+const { isAcceptableImageUrl } = require('./media-normalizer');
 const InstagramPoster = require('./instagram');
 const RateLimiter = require('./rate-limiter');
 const AccountGuard = require('./account-guard');
@@ -83,22 +84,19 @@ class MemeBotCore {
       utilities.logToFile(`Bot: finding a "${type}" meme...`);
       this.rateLimiter.recordAction();
 
-      // 3. Scrape
-      const memeUrl = await getSafeMeme(keyword, type);
+      // 3. Scrape + validate (up to 3 candidates)
+      const { memeUrl, tempFile: tf } = await this._fetchValidMeme(keyword, type);
+      tempFile = tf;
       this.rateLimiter.recordAction();
 
-      // 4. Download
-      tempFile = path.join(process.cwd(), `meme_${Date.now()}.jpg`);
-      await this._downloadImage(memeUrl, tempFile);
-
-      // 5. Human-like pause before posting
+      // 4. Human-like pause before posting
       await this.accountGuard.humanDelay(5000);
 
-      // 6. Post
+      // 5. Post
       utilities.logToFile('Bot: posting to Instagram...');
-      const result = await this.instagramPoster.postImage(tempFile);
+      const result = await this.instagramPoster.postImage(tempFile, memeUrl);
 
-      // 7. Record success
+      // 6. Record success
       this.rateLimiter.recordPost();
       this.accountGuard.recordSuccess();
       this.analytics.recordPost({
@@ -115,7 +113,6 @@ class MemeBotCore {
       this.accountGuard.recordError(error.message);
       this.analytics.recordError(error);
 
-      // rate-limit response from Instagram
       if (
         error.message.includes('rate limit') ||
         error.message.includes('too many')
@@ -142,11 +139,12 @@ class MemeBotCore {
         : getRandomKeyword(postType);
 
       utilities.logToFile(`Bot: immediate post – keyword="${kw}" type="${type}"`);
-      const memeUrl = await getSafeMeme(kw, type);
-      tempFile = path.join(process.cwd(), `meme_${Date.now()}.jpg`);
-      await this._downloadImage(memeUrl, tempFile);
+
+      const { memeUrl, tempFile: tf } = await this._fetchValidMeme(kw, type);
+      tempFile = tf;
+
       utilities.logToFile('Bot: posting to Instagram (immediate)...');
-      const result = await this.instagramPoster.postImage(tempFile);
+      const result = await this.instagramPoster.postImage(tempFile, memeUrl);
       this.rateLimiter.recordPost();
       this.accountGuard.recordSuccess();
       this.analytics.recordPost({
@@ -220,6 +218,46 @@ class MemeBotCore {
   /* ------------------------------------------------------------------ */
   /*  Helpers                                                            */
   /* ------------------------------------------------------------------ */
+
+  async _fetchValidMeme(keyword, type, maxAttempts = 3) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let tempFile;
+      try {
+        const memeUrl = await getSafeMeme(keyword, type);
+
+        if (!isAcceptableImageUrl(memeUrl)) {
+          utilities.logToFile(
+            `Bot: candidate ${attempt}/${maxAttempts} rejected (bad URL: ${memeUrl})`,
+            'warn'
+          );
+          continue;
+        }
+
+        tempFile = path.join(process.cwd(), `meme_${Date.now()}.jpg`);
+        await this._downloadImage(memeUrl, tempFile);
+
+        const check = utilities.validateImage(tempFile);
+        if (!check.valid) {
+          utilities.logToFile(
+            `Bot: candidate ${attempt}/${maxAttempts} rejected (${check.reason})`,
+            'warn'
+          );
+          utilities.cleanupFile(tempFile);
+          continue;
+        }
+
+        utilities.logToFile(`Bot: candidate ${attempt}/${maxAttempts} accepted: ${memeUrl}`);
+        return { memeUrl, tempFile };
+      } catch (err) {
+        utilities.logToFile(
+          `Bot: candidate ${attempt}/${maxAttempts} failed: ${err.message}`,
+          'warn'
+        );
+        utilities.cleanupFile(tempFile);
+      }
+    }
+    throw new Error(`Failed to find valid meme after ${maxAttempts} attempts`);
+  }
 
   async _downloadImage(url, filepath) {
     const response = await axios({

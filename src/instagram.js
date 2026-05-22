@@ -2,6 +2,7 @@ const { IgApiClient } = require('instagram-private-api');
 const fs = require('fs');
 const path = require('path');
 const utilities = require('./utils');
+const { normalizeImage } = require('./media-normalizer');
 
 /**
  * Caption templates organised by mood.
@@ -125,32 +126,63 @@ class InstagramPoster {
       .replace('{tags}', HASHTAG_GROUPS[idx]);
   }
 
-  async postImage(imagePath) {
-    // validate image before uploading
+  /**
+   * Post an image to Instagram.
+   * @param {string} imagePath  path to the raw downloaded image
+   * @param {string} [sourceUrl]  original URL for logging
+   */
+  async postImage(imagePath, sourceUrl) {
     const check = utilities.validateImage(imagePath);
     if (!check.valid) {
       throw new Error(`Image validation failed: ${check.reason}`);
     }
 
+    // normalize to Instagram-safe JPEG
+    const rawBuffer = await fs.promises.readFile(imagePath);
+    const { buffer: jpegBuffer, metadata: mediaMeta } = await normalizeImage(rawBuffer, sourceUrl || imagePath);
+
+    // dry-run mode: skip actual upload
+    if (process.env.DRY_RUN_UPLOAD === 'true') {
+      const caption = this.generateCaption();
+      utilities.logToFile(
+        `Instagram: DRY RUN – skipping upload. Media: ${JSON.stringify(mediaMeta.normalized)}, Caption length: ${caption.length}`
+      );
+      return { success: true, caption, dryRun: true };
+    }
+
     const caption = this.generateCaption();
-    const fileData = await fs.promises.readFile(imagePath);
+    const uploadId = Date.now().toString();
 
     try {
-      return await this._attemptPost(fileData, caption);
+      return await this._attemptPost(jpegBuffer, caption, uploadId, mediaMeta);
     } catch (error) {
-      // 412 = stale session → re-login and retry once
-      if (error.message.includes('412') || error.message.includes('Precondition Failed')) {
-        utilities.logToFile('Instagram: session expired (412) – re-logging in...');
+      // only re-login for auth/session errors, not media issues
+      if (this._isSessionError(error)) {
+        utilities.logToFile('Instagram: session error detected – re-logging in...');
         await this._reLogin();
-        return await this._attemptPost(fileData, caption);
+        return await this._attemptPost(jpegBuffer, caption, uploadId, mediaMeta);
       }
       throw error;
     }
   }
 
-  async _attemptPost(fileData, caption) {
+  _isSessionError(error) {
+    const msg = error.message || '';
+    return (
+      msg.includes('login_required') ||
+      msg.includes('401') ||
+      msg.includes('Not authorized') ||
+      (msg.includes('412') && msg.includes('Precondition'))
+    );
+  }
+
+  async _attemptPost(fileData, caption, uploadId, mediaMeta) {
     try {
-      utilities.logToFile('Instagram: uploading post...');
+      utilities.logToFile(
+        `Instagram: uploading post (upload_id=${uploadId}, ` +
+        `${mediaMeta.normalized.width}x${mediaMeta.normalized.height}, ` +
+        `${(mediaMeta.normalized.size / 1024).toFixed(0)} KB)...`
+      );
       await utilities.randomDelay(3000, 7000);
 
       await this.ig.publish.photo({ file: fileData, caption });
@@ -160,13 +192,20 @@ class InstagramPoster {
       await utilities.randomDelay(5000, 15000);
       return { success: true, caption };
     } catch (error) {
-      throw this._handlePostError(error);
+      this._logUploadError(error, uploadId, mediaMeta);
+      throw error;
     }
   }
 
-  _handlePostError(error) {
+  _logUploadError(error, uploadId, mediaMeta) {
     utilities.logToFile(
-      `Instagram: posting error – ${error.message}`,
+      `Instagram: upload failed – ${error.message}`,
+      'error'
+    );
+    utilities.logToFile(
+      `Instagram: upload details – upload_id=${uploadId} ` +
+      `original=${JSON.stringify(mediaMeta.original)} ` +
+      `normalized=${JSON.stringify(mediaMeta.normalized)}`,
       'error'
     );
     if (
@@ -179,7 +218,6 @@ class InstagramPoster {
       );
       utilities.cleanupFile(this.sessionPath);
     }
-    return error;
   }
 
   async _reLogin() {
