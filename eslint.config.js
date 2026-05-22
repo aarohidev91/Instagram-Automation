@@ -3,6 +3,7 @@ const globals = require('globals');
 module.exports = [
   {
     files: ['**/*.js'],
+    ignores: ['src/public/**'],
     languageOptions: {
       ecmaVersion: 'latest',
       sourceType: 'commonjs',

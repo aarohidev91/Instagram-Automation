@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Instagram Meme Bot - Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <header class="header">
+      <h1>Instagram Meme Bot</h1>
+      <div class="header-controls">
+        <span id="statusBadge" class="badge badge-idle">Idle</span>
+        <button id="btnStart" class="btn btn-success" onclick="startBot()">Start Bot</button>
+        <button id="btnStop" class="btn btn-danger" onclick="stopBot()">Stop Bot</button>
+      </div>
+    </header>
+
+    <!-- Stats Cards -->
+    <section class="cards">
+      <div class="card">
+        <div class="card-icon">&#128200;</div>
+        <div class="card-body">
+          <h3 id="postsToday">0</h3>
+          <p>Posts Today</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#128197;</div>
+        <div class="card-body">
+          <h3 id="postsWeek">0</h3>
+          <p>This Week</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#9989;</div>
+        <div class="card-body">
+          <h3 id="successRate">100%</h3>
+          <p>Success Rate</p>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-icon">&#128336;</div>
+        <div class="card-body">
+          <h3 id="uptime">0h</h3>
+          <p>Uptime</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Grid -->
+    <div class="grid">
+      <!-- Schedule Panel -->
+      <section class="panel">
+        <h2>Today's Schedule</h2>
+        <div id="scheduleList" class="schedule-list">
+          <p class="muted">Loading...</p>
+        </div>
+      </section>
+
+      <!-- Safety Panel -->
+      <section class="panel">
+        <h2>Account Safety</h2>
+        <div id="safetyInfo" class="safety-info">
+          <p class="muted">Loading...</p>
+        </div>
+      </section>
+
+      <!-- Settings Panel -->
+      <section class="panel">
+        <h2>Settings</h2>
+        <form id="settingsForm" onsubmit="saveSettings(event)">
+          <label>Posts Per Day
+            <input type="number" id="setPostsPerDay" min="1" max="10" value="3" />
+          </label>
+          <label>Active Hours Start
+            <input type="number" id="setActiveStart" min="0" max="23" value="9" />
+          </label>
+          <label>Active Hours End
+            <input type="number" id="setActiveEnd" min="0" max="23" value="23" />
+          </label>
+          <label>Post Types
+            <input type="text" id="setPostTypes" value="funny,hinglish,trending" placeholder="comma-separated" />
+          </label>
+          <label>Max Posts Per Day (safety limit)
+            <input type="number" id="setMaxPosts" min="1" max="15" value="5" />
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="setWeekendPause" />
+            Reduce posting on weekends
+          </label>
+          <button type="submit" class="btn btn-primary">Save Settings</button>
+          <button type="button" class="btn btn-warning" onclick="postNow()">Post Now</button>
+        </form>
+      </section>
+
+      <!-- Recent Posts -->
+      <section class="panel">
+        <h2>Recent Posts</h2>
+        <div id="recentPosts" class="recent-list">
+          <p class="muted">Loading...</p>
+        </div>
+      </section>
+
+      <!-- Weekly Chart -->
+      <section class="panel wide">
+        <h2>Posts This Week</h2>
+        <div id="weeklyChart" class="chart"></div>
+      </section>
+
+      <!-- Logs Panel -->
+      <section class="panel wide">
+        <h2>Live Logs</h2>
+        <div id="logsPanel" class="logs-panel">
+          <p class="muted">Loading...</p>
+        </div>
+      </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>Instagram Meme Bot &middot; Production Dashboard &middot; Keep-alive active</p>
+    </footer>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

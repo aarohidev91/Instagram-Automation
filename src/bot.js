@@ -4,107 +4,215 @@ const path = require('path');
 const utilities = require('./utils');
 const { getSafeMeme, getRandomKeyword } = require('./scraper');
 const InstagramPoster = require('./instagram');
+const RateLimiter = require('./rate-limiter');
+const AccountGuard = require('./account-guard');
+const PostScheduler = require('./scheduler');
+const Analytics = require('./analytics');
+const ConfigManager = require('./config');
 
 /**
- * Main bot class that orchestrates meme scraping and posting
+ * Production-grade bot that orchestrates scraping, posting,
+ * rate-limiting, scheduling, and safety checks.
  */
 class MemeBotCore {
   constructor() {
+    const cfg = ConfigManager.getAll();
+
     this.instagramPoster = new InstagramPoster();
+
+    this.rateLimiter = new RateLimiter({
+      postsPerDay: cfg.maxPostsPerDay,
+      minPostInterval: cfg.minPostIntervalMin * 60 * 1000,
+      maxPostInterval: cfg.maxPostIntervalMin * 60 * 1000,
+    });
+
+    this.accountGuard = new AccountGuard({
+      activeHoursStart: cfg.activeHoursStart,
+      activeHoursEnd: cfg.activeHoursEnd,
+      timezone: cfg.timezone,
+      warmUpDays: cfg.warmUpDays,
+      safeModeHours: cfg.safeModeHours,
+      enableWeekendPause: cfg.enableWeekendPause,
+      weekendMaxPosts: cfg.weekendMaxPosts,
+    });
+
+    this.scheduler = new PostScheduler({
+      postsPerDay: cfg.postsPerDay,
+      activeHoursStart: cfg.activeHoursStart,
+      activeHoursEnd: cfg.activeHoursEnd,
+      timezone: cfg.timezone,
+      postTypes: cfg.postTypes,
+    });
+
+    this.analytics = new Analytics();
+
+    this._status = 'idle'; // idle | running | paused | error
+    this._shutdownRequested = false;
   }
 
-  /**
-   * Initialize the bot
-   */
+  /* ------------------------------------------------------------------ */
+  /*  Lifecycle                                                          */
+  /* ------------------------------------------------------------------ */
+
   async initialize() {
     await this.instagramPoster.initialize();
+    this._status = 'running';
+    utilities.logToFile('Bot: initialized');
   }
 
-  /**
-   * Download an image from URL
-   * @param {string} url - Image URL
-   * @param {string} filepath - Local file path to save
-   */
-  async downloadImage(url, filepath) {
-    const response = await axios({
-      url,
-      method: 'GET',
-      responseType: 'stream',
-      timeout: 30000
-    });
-
-    return new Promise((resolve, reject) => {
-      response.data.pipe(fs.createWriteStream(filepath))
-        .on('finish', resolve)
-        .on('error', reject);
-    });
+  requestShutdown() {
+    this._shutdownRequested = true;
+    this._status = 'idle';
+    this.scheduler.stop();
+    utilities.logToFile('Bot: graceful shutdown requested');
   }
 
-  /**
-   * Run a single cycle of the bot (scrape and post)
-   */
-  async runCycle() {
+  /* ------------------------------------------------------------------ */
+  /*  Single cycle                                                       */
+  /* ------------------------------------------------------------------ */
+
+  async runCycle(postType) {
     let tempFile;
     try {
-      // Get random keyword and scrape meme
-      const { keyword, type } = getRandomKeyword();
-      utilities.logToFile(`🔍 Finding a ${type} meme...`);
-      utilities.logToFile(`🔍 Searching Pinterest for: ${decodeURIComponent(keyword)}`);
-      
+      // 1. Safety gate
+      await this.accountGuard.waitForSafeWindow();
+      await this.rateLimiter.waitForPostSlot();
+
+      // 2. Pick keyword
+      const { keyword, type } = getRandomKeyword(postType);
+      utilities.logToFile(`Bot: finding a "${type}" meme...`);
+      this.rateLimiter.recordAction();
+
+      // 3. Scrape
       const memeUrl = await getSafeMeme(keyword);
-      utilities.logToFile(`📌 Selected meme: ${memeUrl}`);
+      this.rateLimiter.recordAction();
 
-      // Download the image
+      // 4. Download
       tempFile = path.join(process.cwd(), `meme_${Date.now()}.jpg`);
-      await this.downloadImage(memeUrl, tempFile);
+      await this._downloadImage(memeUrl, tempFile);
 
-      utilities.logToFile('📤 Posting to Instagram...');
-      await this.instagramPoster.postImage(tempFile);
+      // 5. Human-like pause before posting
+      await this.accountGuard.humanDelay(5000);
 
+      // 6. Post
+      utilities.logToFile('Bot: posting to Instagram...');
+      const result = await this.instagramPoster.postImage(tempFile);
+
+      // 7. Record success
+      this.rateLimiter.recordPost();
+      this.accountGuard.recordSuccess();
+      this.analytics.recordPost({
+        postType: type,
+        keyword: decodeURIComponent(keyword),
+        memeUrl,
+        caption: result.caption,
+      });
+
+      utilities.logToFile('Bot: cycle complete!');
+      return { success: true, type };
     } catch (error) {
-      utilities.logToFile(`❌ Bot cycle error: ${error.message}`);
-      
-      // Handle rate limits
-      if (error.message.includes('rate limit') || error.message.includes('too many')) {
-        const waitHours = 1 + Math.random() * 2; // 1-3 hours
-        utilities.logToFile(`⏳ Rate limited, waiting ${waitHours.toFixed(1)} hours...`);
-        await utilities.delay(waitHours * 60 * 60 * 1000);
+      utilities.logToFile(`Bot: cycle error – ${error.message}`, 'error');
+      this.accountGuard.recordError(error.message);
+      this.analytics.recordError(error);
+
+      // rate-limit response from Instagram
+      if (
+        error.message.includes('rate limit') ||
+        error.message.includes('too many')
+      ) {
+        const cooldown = (1 + Math.random() * 2) * 60 * 60 * 1000;
+        this.rateLimiter.setCooldown(cooldown);
       }
-      // Handle Puppeteer connection errors
-      else if (error.message.includes('Protocol error') || error.message.includes('Connection closed')) {
-        const waitHours = 3 + Math.random() * 2; // 3-5 hours
-        utilities.logToFile(`⚠️ Cloud environment error, waiting ${waitHours.toFixed(1)} hours...`);
-        await utilities.delay(waitHours * 60 * 60 * 1000);
-      }
-      
+
       throw error;
     } finally {
-      // Clean up downloaded file
       utilities.cleanupFile(tempFile);
     }
   }
 
-  /**
-   * Run the bot continuously
-   */
+  /* ------------------------------------------------------------------ */
+  /*  Continuous mode                                                     */
+  /* ------------------------------------------------------------------ */
+
   async runContinuous() {
-    utilities.logToFile('🚀 Starting Instagram Meme Bot');
-    
-    while (true) {
+    utilities.logToFile('Bot: starting continuous mode');
+    this._status = 'running';
+
+    while (!this._shutdownRequested) {
       try {
         await this.runCycle();
-        
-        // Random delay between posts (40-120 minutes)
-        const delayInMinutes = Math.floor(Math.random() * 81) + 40;
-        utilities.logToFile(`🕒 Waiting ${delayInMinutes} minutes before next post...`);
-        await utilities.delay(delayInMinutes * 60 * 1000);
-        
+
+        const delay = this.rateLimiter.getRandomPostDelay();
+        utilities.logToFile(
+          `Bot: next post in ~${utilities.formatDuration(delay)}`
+        );
+        await utilities.delay(delay);
       } catch (error) {
-        utilities.logToFile(`💥 Fatal error: ${error.message}`);
-        // Wait 3 hours if fatal error occurs
-        await utilities.delay(3 * 60 * 60 * 1000);
+        utilities.logToFile(`Bot: error in loop – ${error.message}`, 'error');
+        this._status = 'error';
+        const backoff = 30 * 60 * 1000 + Math.random() * 30 * 60 * 1000;
+        utilities.logToFile(
+          `Bot: backing off for ${utilities.formatDuration(backoff)}`
+        );
+        await utilities.delay(backoff);
+        this._status = 'running';
       }
     }
+  }
+
+  /**
+   * Scheduler-driven mode – the PostScheduler triggers runCycle()
+   * at its computed time-slots.
+   */
+  startScheduled() {
+    utilities.logToFile('Bot: starting scheduled mode');
+    this._status = 'running';
+
+    this.scheduler.start(async (postType) => {
+      if (this._shutdownRequested) return;
+      try {
+        await this.runCycle(postType);
+      } catch (err) {
+        utilities.logToFile(
+          `Bot: scheduled post failed – ${err.message}`,
+          'error'
+        );
+      }
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Helpers                                                            */
+  /* ------------------------------------------------------------------ */
+
+  async _downloadImage(url, filepath) {
+    const response = await axios({
+      url,
+      method: 'GET',
+      responseType: 'stream',
+      timeout: 30000,
+    });
+
+    return new Promise((resolve, reject) => {
+      const stream = fs.createWriteStream(filepath);
+      response.data.pipe(stream);
+      stream.on('finish', resolve);
+      stream.on('error', reject);
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
+  /*  Dashboard getters                                                  */
+  /* ------------------------------------------------------------------ */
+
+  getStatus() {
+    return {
+      status: this._status,
+      rateLimiter: this.rateLimiter.getStats(),
+      accountGuard: this.accountGuard.getStats(),
+      scheduler: this.scheduler.getSchedule(),
+      analytics: this.analytics.getOverview(),
+    };
   }
 }
 
