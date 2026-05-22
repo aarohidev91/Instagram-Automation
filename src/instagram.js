@@ -109,12 +109,14 @@ class InstagramPoster {
       await this.ig.qe.syncLoginExperiments();
       utilities.logToFile('Instagram: synced login experiments');
     } catch (e) {
+      if (e.message.includes('checkpoint') || e.message.includes('challenge')) throw e;
       utilities.logToFile(`Instagram: qe sync skipped – ${e.message}`, 'debug');
     }
     try {
       await this.ig.consent.existingUserFlowTosAndTwoAgeButton();
       utilities.logToFile('Instagram: accepted consent/TOS');
     } catch (e) {
+      if (e.message.includes('checkpoint') || e.message.includes('challenge')) throw e;
       utilities.logToFile(`Instagram: consent flow skipped – ${e.message}`, 'debug');
     }
     await utilities.randomDelay(1000, 2000);
