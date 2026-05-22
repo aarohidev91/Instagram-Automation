@@ -124,41 +124,67 @@ class InstagramPoster {
       throw new Error(`Image validation failed: ${check.reason}`);
     }
 
-    try {
-      const caption = this.generateCaption();
+    const caption = this.generateCaption();
+    const fileData = await fs.promises.readFile(imagePath);
 
+    try {
+      return await this._attemptPost(fileData, caption);
+    } catch (error) {
+      // 412 = stale session → re-login and retry once
+      if (error.message.includes('412') || error.message.includes('Precondition Failed')) {
+        utilities.logToFile('Instagram: session expired (412) – re-logging in...');
+        await this._reLogin();
+        return await this._attemptPost(fileData, caption);
+      }
+      throw this._handlePostError(error);
+    }
+  }
+
+  async _attemptPost(fileData, caption) {
+    try {
       utilities.logToFile('Instagram: uploading post...');
       await utilities.randomDelay(3000, 7000);
 
-      await this.ig.publish.photo({
-        file: await fs.promises.readFile(imagePath),
-        caption,
-      });
+      await this.ig.publish.photo({ file: fileData, caption });
 
-      // refresh session after successful post
       await this._saveSession();
-
       utilities.logToFile('Instagram: post successful!');
       await utilities.randomDelay(5000, 15000);
       return { success: true, caption };
     } catch (error) {
+      throw this._handlePostError(error);
+    }
+  }
+
+  _handlePostError(error) {
+    utilities.logToFile(
+      `Instagram: posting error – ${error.message}`,
+      'error'
+    );
+    if (
+      error.message.includes('checkpoint') ||
+      error.message.includes('challenge')
+    ) {
       utilities.logToFile(
-        `Instagram: posting error – ${error.message}`,
+        'Instagram: CHECKPOINT – verify in the Instagram app!',
         'error'
       );
-
-      if (
-        error.message.includes('checkpoint') ||
-        error.message.includes('challenge')
-      ) {
-        utilities.logToFile(
-          'Instagram: CHECKPOINT – verify in the Instagram app!',
-          'error'
-        );
-        utilities.cleanupFile(this.sessionPath);
-      }
-      throw error;
+      utilities.cleanupFile(this.sessionPath);
     }
+    return error;
+  }
+
+  async _reLogin() {
+    utilities.cleanupFile(this.sessionPath);
+    this.ig = new IgApiClient();
+    this.ig.state.generateDevice(process.env.INSTA_USERNAME);
+    await utilities.randomDelay(2000, 4000);
+    await this.ig.account.login(
+      process.env.INSTA_USERNAME,
+      process.env.INSTA_PASSWORD
+    );
+    await this._saveSession();
+    utilities.logToFile('Instagram: re-login successful');
   }
 }
 
