@@ -63,6 +63,7 @@ class InstagramPoster {
         );
         await this.ig.state.deserialize(saved);
         utilities.logToFile('Instagram: restored session');
+        await this._postLoginSetup();
       } else {
         await this._fullLogin();
       }
@@ -94,11 +95,31 @@ class InstagramPoster {
       process.env.INSTA_USERNAME,
       process.env.INSTA_PASSWORD
     );
+    // post-login: sync experiments and accept consent/TOS
+    await this._postLoginSetup();
     // post-login simulation — run in background, don't block
     this.ig.simulate.postLoginFlow().catch(() => {});
     await utilities.randomDelay(2000, 4000);
     await this._saveSession();
     utilities.logToFile('Instagram: logged in and saved session');
+  }
+
+  async _postLoginSetup() {
+    try {
+      await this.ig.qe.syncLoginExperiments();
+      utilities.logToFile('Instagram: synced login experiments');
+    } catch (e) {
+      if (e.message.includes('checkpoint') || e.message.includes('challenge')) throw e;
+      utilities.logToFile(`Instagram: qe sync skipped – ${e.message}`, 'debug');
+    }
+    try {
+      await this.ig.consent.existingUserFlowTosAndTwoAgeButton();
+      utilities.logToFile('Instagram: accepted consent/TOS');
+    } catch (e) {
+      if (e.message.includes('checkpoint') || e.message.includes('challenge')) throw e;
+      utilities.logToFile(`Instagram: consent flow skipped – ${e.message}`, 'debug');
+    }
+    await utilities.randomDelay(1000, 2000);
   }
 
   async _saveSession() {
@@ -202,6 +223,21 @@ class InstagramPoster {
       `Instagram: upload failed – ${error.message}`,
       'error'
     );
+
+    // capture full API response body for diagnostics
+    if (error.response && error.response.body) {
+      utilities.logToFile(
+        `Instagram: response body – ${JSON.stringify(error.response.body)}`,
+        'error'
+      );
+    }
+    if (error.response && error.response.statusCode) {
+      utilities.logToFile(
+        `Instagram: status=${error.response.statusCode}`,
+        'error'
+      );
+    }
+
     utilities.logToFile(
       `Instagram: upload details – upload_id=${uploadId} ` +
       `original=${JSON.stringify(mediaMeta.original)} ` +
