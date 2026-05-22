@@ -123,8 +123,9 @@ function createServer(bot) {
       for (const key of allowed) {
         if (req.body[key] !== undefined) update[key] = req.body[key];
       }
-      // apply to scheduler
-      if (update.postsPerDay || update.postTypes) {
+      // apply to scheduler (any scheduling-relevant key)
+      const schedulerKeys = ['postsPerDay', 'activeHoursStart', 'activeHoursEnd', 'postTypes'];
+      if (schedulerKeys.some((k) => update[k] !== undefined)) {
         bot.scheduler.updateSettings(update);
       }
       // apply to rate limiter
@@ -132,6 +133,11 @@ function createServer(bot) {
         bot.rateLimiter.updateLimits({
           postsPerDay: update.maxPostsPerDay,
         });
+      }
+      // apply to account guard
+      const guardKeys = ['activeHoursStart', 'activeHoursEnd', 'enableWeekendPause', 'weekendMaxPosts'];
+      if (guardKeys.some((k) => update[k] !== undefined)) {
+        bot.accountGuard.updateConfig(update);
       }
       res.json({ ok: true, applied: update });
     } catch (err) {

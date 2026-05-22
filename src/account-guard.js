@@ -225,16 +225,29 @@ class AccountGuard {
     };
   }
 
+  /** Update config at runtime (e.g. from dashboard) */
+  updateConfig(newConfig) {
+    const keys = [
+      'activeHoursStart', 'activeHoursEnd', 'enableWeekendPause',
+      'weekendMaxPosts', 'warmUpDays', 'safeModeHours',
+      'maxConsecutiveErrors',
+    ];
+    for (const key of keys) {
+      if (newConfig[key] !== undefined) this.config[key] = newConfig[key];
+    }
+  }
+
   /* ----- helpers ---------------------------------------------------- */
 
   _msUntilActiveHours() {
     const now = this._nowInTimezone();
     const hour = now.getHours();
+    const minuteMs = now.getMinutes() * 60 * 1000 + now.getSeconds() * 1000;
     if (hour < this.config.activeHoursStart) {
-      return (this.config.activeHoursStart - hour) * 60 * 60 * 1000;
+      return (this.config.activeHoursStart - hour) * 60 * 60 * 1000 - minuteMs;
     }
     // past active hours → wait until next day
-    return (24 - hour + this.config.activeHoursStart) * 60 * 60 * 1000;
+    return (24 - hour + this.config.activeHoursStart) * 60 * 60 * 1000 - minuteMs;
   }
 
   _msUntilMidnight() {
